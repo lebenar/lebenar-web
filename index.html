@@ -9,10 +9,12 @@
   <link rel="icon" href="assets/images/logo-lebenar.webp">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="visual.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="app-20261024-immersive.css">
+  <script src="app-20261024-immersive.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#contenido">Saltar al contenido</a>
+  <div class="app-shell">
   <aside class="sidebar" aria-label="Navegación principal">
     <a class="brand" href="#inicio" aria-label="LEBENAR, ir al inicio"><img src="assets/images/logo-lebenar.webp" alt="" width="54" height="54"><span>LEBENAR<sup>®</sup><small>CRECER AYUDANDO A CRECER</small></span></a>
     <button class="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="menu">☰</button>
@@ -27,6 +29,8 @@
     <main id="contenido" tabindex="-1"></main>
     <footer><span>LEBENAR® <span class="footer-line">/</span> Crecer ayudando a crecer</span><a href="#acerca">Leonel Benítez · Acerca de este espacio ↗</a></footer>
   </div>
+  </div>
+  <nav class="app-dock" id="app-dock" aria-label="Navegación rápida"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <dialog id="reset-dialog"><h2>¿Reiniciar tu recorrido?</h2><p>Se borrarán el progreso, los guardados y las notas de LEBENAR® en este navegador.</p><div class="button-row"><button class="btn btn-light" id="cancel-reset">Conservar mi recorrido</button><button class="btn btn-dark" id="confirm-reset">Reiniciar</button></div></dialog>
   <noscript><p class="noscript">Activá JavaScript para usar los recorridos y el progreso. Podés consultar la <a href="https://docs.google.com/document/d/1i10Mm-wiVBmPrDz4HQek8J57WC8-ou_ovQhQ5Ij9qnE/edit">guía de inicio original</a>.</p></noscript>
