@@ -17,6 +17,14 @@ async function loadCatalog(access,run){
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes.slice(0,12)},key,cipher);
   const resources=JSON.parse(new TextDecoder().decode(plain));
   if(!Array.isArray(resources)||resources.length!==7||new Set(resources.map(x=>x.id)).size!==7||resources.some(x=>!expectedIds.has(x.id)||new URL(x.url).protocol!=='https:'))throw Error('invalid-catalog');
+  // Server-managed guide replacement is readable only after approval, like the vault key.
+  const replacement=snap.data().guideUrl;
+  if(replacement!==undefined){
+   const u=new URL(replacement);
+   if(typeof replacement!=='string'||u.protocol!=='https:'||u.hostname!=='docs.google.com'||!/^\/document\/d\/[A-Za-z0-9_-]+\//.test(u.pathname))throw Error('invalid-guide');
+   const guide=resources.find(x=>x.id==='guia-inicio');guide.url=replacement;
+   guide.verification=typeof snap.data().guideVerification==='string'?snap.data().guideVerification:'Guía de inicio indicada por Leonel. Conserva los permisos del documento original.';
+  }
   if(run!==generation||!portal.getAccess().training)return;
   catalogMessage='';portal.setCatalog(resources);setProgressAccess(accessUser(),true);
  }catch(e){if(run!==generation)return;catalogMessage='No pudimos abrir los materiales. Reintentá; el acceso permanece cerrado.';portal.catalogError();}
