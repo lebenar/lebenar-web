@@ -6,13 +6,13 @@ const app=getApps().length?getApp():initializeApp({apiKey:'AIzaSyA3LaYCa1wa9DcUg
 const auth=getAuth(app),db=getFirestore(app);
 const PRIMARY_UID='rrVdlkPgKHMpLU1J4gSTQXoVfdz1';
 const isPrimary=()=>admin&&user?.uid===PRIMARY_UID;
-let user=null,membership=null,admin=false,loading=true,error=false,message='',stops=[],listStop=null,generation=0,filter='pending',busy=false;
+let user=null,membership=null,adminRecord=null,admin=false,loading=true,error=false,message='',stops=[],listStop=null,generation=0,filter='pending',busy=false;
 const subscribers=new Set();
-export function subscribeAccess(fn){subscribers.add(fn);fn(accessState({user,membership,admin,loading,error}));return()=>subscribers.delete(fn);}
+export function subscribeAccess(fn){subscribers.add(fn);fn(accessState({user,membership,admin,loading,error}),notificationContext());return()=>subscribers.delete(fn);}
 function element(tag,text,cls){const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;}
 function button(text,fn,parent,disabled=false){const e=element('button',text,'btn btn-light');e.type='button';e.disabled=disabled;e.addEventListener('click',fn);parent.append(e);return e;}
 function notify(text){message=text;const el=document.querySelector('#access-message');if(el)el.textContent=text;}
-function emit(){const s=accessState({user,membership,admin,loading,error});for(const fn of subscribers)fn(s);window.dispatchEvent(new CustomEvent('lebenar-access',{detail:s}));render();}
+function emit(){const s=accessState({user,membership,admin,loading,error});for(const fn of subscribers)fn(s,notificationContext());window.dispatchEvent(new CustomEvent('lebenar-access',{detail:s}));render();}
 function cleanup(){stops.forEach(fn=>fn());stops=[];listStop?.();listStop=null;}
 async function login(){try{const p=new GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,p);}catch(e){notify(e.code==='auth/popup-closed-by-user'?'Ingreso cancelado.':'No pudimos iniciar sesión. Reintentá y permití la ventana de Google.');}}
 async function logout(){try{await signOut(auth);}catch{notify('No pudimos cerrar la sesión. Reintentá.');}}
@@ -79,6 +79,8 @@ function watchList(){
 }
 export function mountAccess(){render();}
 export function accessUser(){return user;}
+function notificationContext(){return {uid:user?.uid||null,profile:membership?.profile||null,version:membership?.updatedAt?.toMillis?.()||0,roleVersion:adminRecord?.updatedAt?.toMillis?.()||0};}
+export function openPendingRequests(){filter='pending';location.hash='#administracion';render();}
 function render(){
  const root=document.querySelector('#access-app');if(!root)return;listStop?.();listStop=null;root.replaceChildren();const state=accessState({user,membership,admin,loading,error});
  root.append(element('h1','Tu acceso a LEBENAR®'));
@@ -96,9 +98,9 @@ function render(){
  if(state.admin){const dashboard=element('section');dashboard.append(element('h2','Administrar accesos'));const tabs=element('div',null,'button-row');for(const [value,title]of [['pending','Pendientes'],['approved','Autorizados'],['rejected','Rechazados'],['revoked','Revocados'],...(isPrimary()?[['administrators','Administradores']]:[])]){const b=button(title,()=>{filter=value;render();},tabs);b.setAttribute('aria-pressed',String(filter===value));}dashboard.append(element('p',isPrimary()?'Administración principal: autorizá principiantes y socios, y asigná o retirá administradores desde las cuentas autorizadas.':'Podés gestionar solicitudes y acceder a todo el contenido. La cuenta principal administra los permisos de otros administradores.'));dashboard.append(tabs);const list=element('div');list.id='request-list';list.setAttribute('aria-live','polite');dashboard.append(list);root.append(dashboard);watchList();}
 }
 function connect(next){
- cleanup();const run=++generation;user=next;membership=null;admin=false;error=false;loading=!!next;message='';
+ cleanup();const run=++generation;user=next;membership=null;adminRecord=null;admin=false;error=false;loading=!!next;message='';
  emit();if(!next)return;
- let gotMembership=false,gotAdmin=false,connectionFailed=false,adminRecord=null;
+ let gotMembership=false,gotAdmin=false,connectionFailed=false;
  const failed=()=>{if(run!==generation)return;connectionFailed=true;membership=null;admin=false;error=true;loading=false;listStop?.();listStop=null;emit();};
  const finish=()=>{if(run!==generation||connectionFailed)return;loading=!(gotMembership&&gotAdmin);admin=adminRecord?.enabled===true&&(next.uid===PRIMARY_UID||membership?.status==='approved');error=false;emit();};
  stops.push(onSnapshot(doc(db,'memberships',next.uid),snap=>{if(run!==generation)return;membership=snap.exists()?snap.data():null;gotMembership=true;finish();},failed));

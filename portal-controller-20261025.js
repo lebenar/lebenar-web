@@ -1,6 +1,6 @@
 import {getApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getFirestore,doc,getDocFromServer,collection,query,orderBy,limit,onSnapshot,addDoc,serverTimestamp,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-import {subscribeAccess,mountAccess,accessUser} from './membership-20261025.js?v=admin-roles-1';
+import {subscribeAccess,mountAccess,accessUser} from './membership-20261025.js?v=bell-1';
 import {setProgressAccess} from './progress-20261025.js';
 const portal=window.lebenarPortal,db=getFirestore(getApp());let generation=0,lastKey='',catalogMessage='',catalogBusy=false,stopCommunity=null,communityRoot=null;
 const expectedIds=new Set(['despegue-spotify','despegue-youtube','guia-inicio','siglo-xxi','biblioteca','como-contactar','lista-profesional']);
@@ -56,3 +56,5 @@ subscribeAccess(access=>{
  stopCommunity?.();stopCommunity=null;communityRoot=null;catalogMessage='';catalogBusy=false;setProgressAccess(null,false);portal.setAccess(access);
  if(access.training)loadCatalog(access,run);else mount();
 });
+
+import('./notifications-20261026.js?v=bell-1').catch(()=>{const host=document.querySelector('#notification-host');if(host)host.textContent='Avisos no disponibles';});
