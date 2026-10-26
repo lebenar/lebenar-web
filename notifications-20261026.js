@@ -1,6 +1,6 @@
 import {getApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getFirestore,collection,query,where,limit,onSnapshot} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-import {subscribeAccess,openPendingRequests} from './membership-20261025.js?v=bell-1';
+import {subscribeAccess,openPendingRequests} from './membership-20261025.js?v=home-1';
 import {accessNotice,pendingNotices,rememberRead} from './notification-model.mjs';
 import {createNotificationView} from './notification-view.mjs';
 const host=document.querySelector('#notification-host');

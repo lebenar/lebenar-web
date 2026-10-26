@@ -1,7 +1,7 @@
 import {getApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getFirestore,doc,getDocFromServer,collection,query,orderBy,limit,onSnapshot,addDoc,serverTimestamp,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-import {subscribeAccess,mountAccess,accessUser} from './membership-20261025.js?v=bell-1';
-import {setProgressAccess} from './progress-20261025.js';
+import {subscribeAccess,mountAccess,accessUser} from './membership-20261025.js?v=home-1';
+import {setProgressAccess} from './progress-20261025.js?v=home-1';
 const portal=window.lebenarPortal,db=getFirestore(getApp());let generation=0,lastKey='',catalogMessage='',catalogBusy=false,stopCommunity=null,communityRoot=null;
 const expectedIds=new Set(['despegue-spotify','despegue-youtube','guia-inicio','siglo-xxi','biblioteca','como-contactar','lista-profesional']);
 const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -57,4 +57,4 @@ subscribeAccess(access=>{
  if(access.training)loadCatalog(access,run);else mount();
 });
 
-import('./notifications-20261026.js?v=bell-1').catch(()=>{const host=document.querySelector('#notification-host');if(host)host.textContent='Avisos no disponibles';});
+import('./notifications-20261026.js?v=home-1').catch(()=>{const host=document.querySelector('#notification-host');if(host)host.textContent='Avisos no disponibles';});
