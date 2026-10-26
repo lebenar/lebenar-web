@@ -4,6 +4,8 @@ import {getFirestore,doc,onSnapshot,runTransaction,serverTimestamp,collection,qu
 import {accessState} from './access-state.mjs';
 const app=getApps().length?getApp():initializeApp({apiKey:'AIzaSyA3LaYCa1wa9DcUgMPK8pAUxD4U3LSoRSc',authDomain:'lebenar-educacion.firebaseapp.com',projectId:'lebenar-educacion',storageBucket:'lebenar-educacion.firebasestorage.app',messagingSenderId:'262913977772',appId:'1:262913977772:web:14f92b597679544b239e09'});
 const auth=getAuth(app),db=getFirestore(app);
+const PRIMARY_UID='rrVdlkPgKHMpLU1J4gSTQXoVfdz1';
+const isPrimary=()=>admin&&user?.uid===PRIMARY_UID;
 let user=null,membership=null,admin=false,loading=true,error=false,message='',stops=[],listStop=null,generation=0,filter='pending',busy=false;
 const subscribers=new Set();
 export function subscribeAccess(fn){subscribers.add(fn);fn(accessState({user,membership,admin,loading,error}));return()=>subscribers.delete(fn);}
@@ -25,12 +27,42 @@ async function decide(uid,status,profile){
  if(!admin||!user||uid===user.uid||busy)return;
  const labels={approved:profile==='member'?'autorizar como socio':'autorizar como nuevo',rejected:'rechazar la solicitud',revoked:'revocar el acceso'};
  if(!confirm(`¿Confirmás ${labels[status]} para esta persona?`))return;
- busy=true;try{await updateDoc(doc(db,'memberships',uid),{status,profile,updatedAt:serverTimestamp()});notify('Permiso actualizado.');}
+ busy=true;try{await runTransaction(db,async tx=>{
+ const ref=doc(db,'memberships',uid);let role=null;
+ if(isPrimary())role=await tx.get(doc(db,'adminAccess',uid));
+ tx.update(ref,{status,profile,updatedAt:serverTimestamp()});
+ if(role?.exists()&&role.data().enabled===true&&status!=='approved')tx.set(doc(db,'adminAccess',uid),{enabled:false,displayLabel:role.data().displayLabel||'Administrador',updatedBy:user.uid,updatedAt:serverTimestamp()});
+ });notify('Permiso actualizado.');}
  catch{notify('No pudimos cambiar el permiso. Comprobá tu acceso administrativo y reintentá.');}
  finally{busy=false;}
 }
+async function setAdministrator(uid,label,enabled){
+ if(!isPrimary()||!user||uid===user.uid||busy)return;
+ const text=enabled?'Conceder administración: acceso a toda la formación, biblioteca, comunidad y gestión de solicitudes. Solo vos podés nombrar otros administradores.':'Retirar administración: conserva únicamente el acceso educativo de su perfil. Para cerrar todo el acceso, usá Revocar acceso.';
+ if(!confirm(`${text}\nCuenta: ${label}\nIdentificador: ${uid}\n¿Confirmás este cambio?`))return;
+ busy=true;
+ try{await runTransaction(db,async tx=>{
+ const ref=doc(db,'adminAccess',uid),membershipRef=doc(db,'memberships',uid);
+ const [role,request]=await Promise.all([tx.get(ref),tx.get(membershipRef)]);
+ if(enabled&&(!request.exists()||request.data().status!=='approved'))throw Error('not-approved');
+ tx.set(ref,{enabled,displayLabel:request.exists()?request.data().displayLabel:(role.data()?.displayLabel||label),updatedBy:user.uid,updatedAt:serverTimestamp()});
+ });notify(enabled?'Administrador habilitado con acceso a toda la plataforma.':'Administración retirada. El perfil educativo se conserva.');}
+ catch{notify('No pudimos actualizar la administración. La cuenta debe estar autorizada y solo el administrador principal puede realizar este cambio.');}
+ finally{busy=false;render();}
+}
+function watchAdministrators(list){
+ const run=generation;list.textContent='Cargando administradores…';
+ listStop=onSnapshot(query(collection(db,'adminAccess'),where('enabled','==',true),limit(100)),snap=>{
+ if(run!==generation||!isPrimary())return;list.replaceChildren();
+ for(const item of snap.docs){const d=item.data(),row=element('article',null,'panel request-row'),primary=item.id===PRIMARY_UID;
+ row.append(element('h3',primary?'LEBENAR® · Administrador principal':d.displayLabel||'Administrador'),element('small',`Identificador: ${item.id}`),element('p',primary?'Tu cuenta principal está protegida.':'Toda la formación, biblioteca, comunidad y gestión de solicitudes.'));
+ if(!primary)button('Retirar administración',()=>setAdministrator(item.id,d.displayLabel||'Administrador',false),row);
+ list.append(row);}list.append(element('small','Hasta 100 roles habilitados. Revocar el acceso general también desactiva la administración.'));
+ },()=>{if(run===generation)list.replaceChildren(element('p','No se pudieron cargar los administradores.'));});
+}
 function watchList(){
  listStop?.();listStop=null;const list=document.querySelector('#request-list');if(!list||!admin)return;
+ if(filter==='administrators'){if(isPrimary())watchAdministrators(list);return;}
  const run=generation;list.textContent='Cargando solicitudes…';
  listStop=onSnapshot(query(collection(db,'memberships'),where('status','==',filter),limit(100)),snap=>{
  if(run!==generation||!admin)return;list.replaceChildren();
@@ -40,7 +72,7 @@ function watchList(){
  button('Autorizar como nuevo',()=>decide(item.id,'approved','training'),actions,own);
  button('Autorizar como socio',()=>decide(item.id,'approved','member'),actions,own);
  if(d.status==='pending')button('Rechazar',()=>decide(item.id,'rejected',d.profile),actions,own);
- if(d.status==='approved')button('Revocar acceso',()=>decide(item.id,'revoked',d.profile),actions,own);
+ if(d.status==='approved'){button('Revocar acceso',()=>decide(item.id,'revoked',d.profile),actions,own);if(isPrimary())button('Dar permiso de administrador',()=>setAdministrator(item.id,d.displayLabel,true),actions,own);}
  list.append(row);}
  list.append(element('small','Se muestran hasta 100 registros del estado seleccionado.'));
  },()=>{if(run===generation){list.replaceChildren(element('p','No pudimos abrir las solicitudes. No se muestran datos de una sesión anterior.'));}});
@@ -57,20 +89,20 @@ function render(){
  if(state.status==='error'){root.append(element('p','No se pudo comprobar tu autorización. Los materiales permanecen cerrados.'));button('Reintentar',()=>connect(user),root);return;}
  if(state.status==='unrequested'){
  root.append(element('h2','Solicitá tu acceso'),element('p','El nombre que elijas será visible para Leonel al revisar tu solicitud. No incluyas teléfono, correo ni datos privados.'));
- const form=element('form'),label=element('label','Nombre para identificar tu solicitud'),input=element('input');input.id='request-label';input.required=true;input.maxLength=80;input.autocomplete='nickname';label.htmlFor=input.id;form.append(label,input);const submit=element('button','Enviar solicitud','btn btn-gold');submit.type='submit';submit.disabled=busy;form.append(submit);form.onsubmit=e=>{e.preventDefault();requestAccess(input.value);};root.append(form);
+ const form=element('form'),label=element('label','Nombre para identificar tu solicitud'),input=element('input');input.id='request-label';input.required=true;input.maxLength=80;input.autocomplete='nickname';label.htmlFor=input.id;form.append(label,input);const submit=element('button','Solicitar permiso al equipo de LEBENAR®','btn btn-gold');submit.type='submit';submit.disabled=busy;form.append(submit);form.onsubmit=e=>{e.preventDefault();requestAccess(input.value);};root.append(form);
  }else if(state.status==='pending')root.append(element('h2','Tu solicitud está pendiente'),element('p','Leonel tiene que confirmar tu acceso antes de que puedas ver los materiales.'));
  else if(['rejected','revoked'].includes(state.status))root.append(element('h2','Tu acceso no está habilitado'),element('p','Esta cuenta no puede abrir los materiales. Si necesitás revisar tu situación, contactá a Leonel.'));
- if(state.training){root.append(element('p',state.community?'Acceso autorizado: entrenamiento y comunidad de socios.':'Acceso autorizado: entrenamiento y biblioteca.'));const links=element('div',null,'button-row');for(const [href,label]of [['#primeros-pasos','Ir al entrenamiento 30D'],['#progreso','Ver mi progreso'],...(state.community?[['#comunidad','Ir a la comunidad']]:[])]){const a=element('a',label,'btn btn-gold');a.href=href;links.append(a);}root.append(links);}
- if(state.admin){const dashboard=element('section');dashboard.append(element('h2','Administrar accesos'));const tabs=element('div',null,'button-row');for(const [value,title]of [['pending','Pendientes'],['approved','Autorizados'],['rejected','Rechazados'],['revoked','Revocados']]){const b=button(title,()=>{filter=value;render();},tabs);b.setAttribute('aria-pressed',String(filter===value));}dashboard.append(tabs);const list=element('div');list.id='request-list';list.setAttribute('aria-live','polite');dashboard.append(list);root.append(dashboard);watchList();}
+ if(state.training){root.append(element('p',state.admin?'Administrador: acceso a toda la formación, biblioteca y comunidad.':state.community?'Acceso autorizado: entrenamiento y comunidad de socios.':'Acceso autorizado: entrenamiento y biblioteca.'));const links=element('div',null,'button-row');for(const [href,label]of [['#primeros-pasos','Ir al entrenamiento 30D'],['#recursos','Ver toda la formación'],['#progreso','Ver mi progreso'],...(state.community?[['#comunidad','Ir a la comunidad']]:[])]){const a=element('a',label,'btn btn-gold');a.href=href;links.append(a);}root.append(links);}
+ if(state.admin){const dashboard=element('section');dashboard.append(element('h2','Administrar accesos'));const tabs=element('div',null,'button-row');for(const [value,title]of [['pending','Pendientes'],['approved','Autorizados'],['rejected','Rechazados'],['revoked','Revocados'],...(isPrimary()?[['administrators','Administradores']]:[])]){const b=button(title,()=>{filter=value;render();},tabs);b.setAttribute('aria-pressed',String(filter===value));}dashboard.append(element('p',isPrimary()?'Administración principal: autorizá principiantes y socios, y asigná o retirá administradores desde las cuentas autorizadas.':'Podés gestionar solicitudes y acceder a todo el contenido. La cuenta principal administra los permisos de otros administradores.'));dashboard.append(tabs);const list=element('div');list.id='request-list';list.setAttribute('aria-live','polite');dashboard.append(list);root.append(dashboard);watchList();}
 }
 function connect(next){
  cleanup();const run=++generation;user=next;membership=null;admin=false;error=false;loading=!!next;message='';
  emit();if(!next)return;
- let gotMembership=false,gotAdmin=false,connectionFailed=false;
+ let gotMembership=false,gotAdmin=false,connectionFailed=false,adminRecord=null;
  const failed=()=>{if(run!==generation)return;connectionFailed=true;membership=null;admin=false;error=true;loading=false;listStop?.();listStop=null;emit();};
- const finish=()=>{if(run!==generation||connectionFailed)return;loading=!(gotMembership&&gotAdmin);error=false;emit();};
+ const finish=()=>{if(run!==generation||connectionFailed)return;loading=!(gotMembership&&gotAdmin);admin=adminRecord?.enabled===true&&(next.uid===PRIMARY_UID||membership?.status==='approved');error=false;emit();};
  stops.push(onSnapshot(doc(db,'memberships',next.uid),snap=>{if(run!==generation)return;membership=snap.exists()?snap.data():null;gotMembership=true;finish();},failed));
- stops.push(onSnapshot(doc(db,'adminAccess',next.uid),snap=>{if(run!==generation)return;admin=snap.exists()&&snap.data().enabled===true;gotAdmin=true;finish();},failed));
+ stops.push(onSnapshot(doc(db,'adminAccess',next.uid),snap=>{if(run!==generation)return;adminRecord=snap.exists()?snap.data():null;gotAdmin=true;finish();},failed));
 }
 onAuthStateChanged(auth,connect,()=>{cleanup();user=null;admin=false;membership=null;loading=false;error=true;emit();});
 render();

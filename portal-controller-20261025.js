@@ -1,6 +1,6 @@
 import {getApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getFirestore,doc,getDocFromServer,collection,query,orderBy,limit,onSnapshot,addDoc,serverTimestamp,deleteDoc} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
-import {subscribeAccess,mountAccess,accessUser} from './membership-20261025.js';
+import {subscribeAccess,mountAccess,accessUser} from './membership-20261025.js?v=admin-roles-1';
 import {setProgressAccess} from './progress-20261025.js';
 const portal=window.lebenarPortal,db=getFirestore(getApp());let generation=0,lastKey='',catalogMessage='',catalogBusy=false,stopCommunity=null,communityRoot=null;
 const expectedIds=new Set(['despegue-spotify','despegue-youtube','guia-inicio','siglo-xxi','biblioteca','como-contactar','lista-profesional']);
