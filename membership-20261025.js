@@ -1,3 +1,4 @@
+import {createProfileController} from './profile-controller.mjs';
 import {initializeApp,getApps,getApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 import {getFirestore,doc,onSnapshot,runTransaction,serverTimestamp,collection,query,where,limit,updateDoc} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';
@@ -8,6 +9,7 @@ const PRIMARY_UID='rrVdlkPgKHMpLU1J4gSTQXoVfdz1';
 const isPrimary=()=>admin&&user?.uid===PRIMARY_UID;
 let user=null,membership=null,adminRecord=null,admin=false,loading=true,error=false,message='',stops=[],listStop=null,generation=0,filter='pending',busy=false;
 const subscribers=new Set();
+const profiles=createProfileController({db,onChange:()=>render()});
 export function subscribeAccess(fn){subscribers.add(fn);fn(accessState({user,membership,admin,loading,error}),notificationContext());return()=>subscribers.delete(fn);}
 function element(tag,text,cls){const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;}
 function button(text,fn,parent,disabled=false){const e=element('button',text,'btn btn-light');e.type='button';e.disabled=disabled;e.addEventListener('click',fn);parent.append(e);return e;}
@@ -17,7 +19,7 @@ function cleanup(){stops.forEach(fn=>fn());stops=[];listStop?.();listStop=null;}
 async function login(){try{const p=new GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});await signInWithPopup(auth,p);}catch(e){notify(e.code==='auth/popup-closed-by-user'?'Ingreso cancelado.':'No pudimos iniciar sesión. Reintentá y permití la ventana de Google.');}}
 async function logout(){try{await signOut(auth);}catch{notify('No pudimos cerrar la sesión. Reintentá.');}}
 async function requestAccess(label){
- if(!user||busy)return;label=label.trim();if(!label||label.length>80){notify('Escribí un nombre de entre 1 y 80 caracteres.');return;}
+ if(!user||busy)return;label=profiles.requestName();if(!label){notify('Completá y guardá tu perfil antes de solicitar acceso.');return;}label=label.trim();if(!label||label.length>80){notify('Escribí un nombre de entre 1 y 80 caracteres.');return;}
  const uid=user.uid;busy=true;render();
  try{await runTransaction(db,async tx=>{const ref=doc(db,'memberships',uid),snap=await tx.get(ref);if(snap.exists())return;tx.set(ref,{displayLabel:label,status:'pending',profile:'training',requestedAt:serverTimestamp(),updatedAt:serverTimestamp()});});notify('Solicitud enviada. Leonel debe autorizar tu acceso.');}
  catch{notify('No pudimos enviar la solicitud. Reintentá; no se creará una solicitud duplicada.');}
@@ -89,9 +91,10 @@ function render(){
  root.append(element('p',user.displayName||'Tu cuenta'),element('small',user.email||''));button('Cerrar sesión',logout,root);
  if(state.status==='loading'){root.append(element('p','Comprobando tu autorización…'));return;}
  if(state.status==='error'){root.append(element('p','No se pudo comprobar tu autorización. Los materiales permanecen cerrados.'));button('Reintentar',()=>connect(user),root);return;}
+ profiles.mount(root,state);
  if(state.status==='unrequested'){
  root.append(element('h2','Solicitá tu acceso'),element('p','El nombre que elijas será visible para Leonel al revisar tu solicitud. No incluyas teléfono, correo ni datos privados.'));
- const form=element('form'),label=element('label','Nombre para identificar tu solicitud'),input=element('input');input.id='request-label';input.required=true;input.maxLength=80;input.autocomplete='nickname';label.htmlFor=input.id;form.append(label,input);const submit=element('button','Solicitar permiso al equipo de LEBENAR®','btn btn-gold');submit.type='submit';submit.disabled=busy;form.append(submit);form.onsubmit=e=>{e.preventDefault();requestAccess(input.value);};root.append(form);
+ button('Solicitar permiso al equipo de LEBENAR®',()=>requestAccess(''),root,busy||!profiles.requestName());
  }else if(state.status==='pending')root.append(element('h2','Tu solicitud está pendiente'),element('p','Leonel tiene que confirmar tu acceso antes de que puedas ver los materiales.'));
  else if(['rejected','revoked'].includes(state.status))root.append(element('h2','Tu acceso no está habilitado'),element('p','Esta cuenta no puede abrir los materiales. Si necesitás revisar tu situación, contactá a Leonel.'));
  if(state.training){root.append(element('p',state.admin?'Administrador: acceso a toda la formación, biblioteca y comunidad.':state.community?'Acceso autorizado: entrenamiento y comunidad de socios.':'Acceso autorizado: entrenamiento y biblioteca.'));const links=element('div',null,'button-row');for(const [href,label]of [['#primeros-pasos','Ir al entrenamiento 30D'],['#recursos','Ver toda la formación'],['#progreso','Ver mi progreso'],...(state.community?[['#comunidad','Ir a la comunidad']]:[])]){const a=element('a',label,'btn btn-gold');a.href=href;links.append(a);}root.append(links);}
@@ -99,12 +102,12 @@ function render(){
 }
 function connect(next){
  cleanup();const run=++generation;user=next;membership=null;adminRecord=null;admin=false;error=false;loading=!!next;message='';
- emit();if(!next)return;
+ profiles.setIdentity(next);emit();if(!next)return;
  let gotMembership=false,gotAdmin=false,connectionFailed=false;
  const failed=()=>{if(run!==generation)return;connectionFailed=true;membership=null;admin=false;error=true;loading=false;listStop?.();listStop=null;emit();};
  const finish=()=>{if(run!==generation||connectionFailed)return;loading=!(gotMembership&&gotAdmin);admin=adminRecord?.enabled===true&&(next.uid===PRIMARY_UID||membership?.status==='approved');error=false;emit();};
  stops.push(onSnapshot(doc(db,'memberships',next.uid),snap=>{if(run!==generation)return;membership=snap.exists()?snap.data():null;gotMembership=true;finish();},failed));
  stops.push(onSnapshot(doc(db,'adminAccess',next.uid),snap=>{if(run!==generation)return;adminRecord=snap.exists()?snap.data():null;gotAdmin=true;finish();},failed));
 }
-onAuthStateChanged(auth,connect,()=>{cleanup();user=null;admin=false;membership=null;loading=false;error=true;emit();});
+onAuthStateChanged(auth,connect,()=>{cleanup();user=null;profiles.setIdentity(null);admin=false;membership=null;loading=false;error=true;emit();});
 render();

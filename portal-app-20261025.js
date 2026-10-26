@@ -88,6 +88,6 @@ window.lebenarAccount={
  render:()=>render({focus:false,scroll:false}),notify,
  attach:controller=>{accountController=controller;controller.panel();}
 };
-import('./portal-controller-20261025.js?v=home-1').catch(()=>{document.querySelectorAll('[data-account-panel],#access-app').forEach(el=>el.textContent='No se pudo comprobar el acceso. Recargá para reintentar. Los materiales permanecen cerrados.');});
+import('./portal-controller-20261025.js?v=profiles-1').catch(()=>{document.querySelectorAll('[data-account-panel],#access-app').forEach(el=>el.textContent='No se pudo comprobar el acceso. Recargá para reintentar. Los materiales permanecen cerrados.');});
 
 })();
