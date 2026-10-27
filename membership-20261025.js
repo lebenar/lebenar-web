@@ -1,4 +1,4 @@
-import {createProfileController} from './profile-controller.mjs';
+import {createProfileController} from './profile-controller.mjs?v=social-1';
 import {initializeApp,getApps,getApp} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signOut} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js';
 import {getFirestore,doc,onSnapshot,runTransaction,serverTimestamp,collection,query,where,limit,updateDoc} from 'https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js';

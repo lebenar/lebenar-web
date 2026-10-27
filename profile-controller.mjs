@@ -2,7 +2,7 @@ import {doc,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic
 import {emptyProfile,validateProfile,googlePhoto,fullName} from './profile-model.mjs';
 const el=(tag,text)=>{const n=document.createElement(tag);if(text)n.textContent=text;return n;};
 export function createProfileController({db,onChange}){
- let user=null,saved=null,draft=emptyProfile(),stop=null,epoch=0,loading=false,error=false,busy=false,dirty=false,message='';
+ let user=null,saved=null,draft=emptyProfile(),stop=null,epoch=0,loading=false,error=false,busy=false,dirty=false,message='',communityAllowed=false;
  const changed=()=>onChange();
  function setIdentity(next){
   if(user?.uid===next?.uid)return;stop?.();stop=null;const run=++epoch;user=next;saved=null;draft=emptyProfile();dirty=false;busy=false;error=false;message='';loading=!!next;
@@ -13,11 +13,12 @@ export function createProfileController({db,onChange}){
  async function save(){
   if(!user||busy||loading||error)return;let value;try{value=validateProfile(draft);}catch(e){message=e.message;changed();return;}
   const run=epoch,uid=user.uid;busy=true;message='Guardando perfil…';changed();
-  try{await runTransaction(db,async tx=>{const ref=doc(db,'profiles',uid),snap=await tx.get(ref);tx.set(ref,{...value,createdAt:snap.exists()?snap.data().createdAt:serverTimestamp(),updatedAt:serverTimestamp()});});if(run!==epoch)return;saved={...value};draft={...value};dirty=false;message='Perfil guardado. Tus permisos y tu progreso se conservan.';}
+  try{await runTransaction(db,async tx=>{const ref=doc(db,'profiles',uid),socialRef=doc(db,'socialProfiles',uid),snap=await tx.get(ref),social=await tx.get(socialRef);tx.set(ref,{...value,createdAt:snap.exists()?snap.data().createdAt:serverTimestamp(),updatedAt:serverTimestamp()});if(social.exists()&&communityAllowed)tx.set(socialRef,{displayName:fullName(value),bio:value.bio,photoURL:value.photoURL,updatedAt:serverTimestamp()});else if(social.exists())tx.delete(socialRef);});if(run!==epoch)return;saved={...value};draft={...value};dirty=false;message='Perfil guardado. Tus permisos y tu progreso se conservan.';}
   catch{if(run!==epoch)return;message='No pudimos guardar el perfil. Conservamos tus cambios en esta pantalla; comprobá tu conexión y reintentá.';}
   finally{if(run===epoch){busy=false;changed();}}
  }
  function mount(root,state){
+  communityAllowed=state.community===true;
   if(!user||['loading','error','visitor'].includes(state.status))return;
   const section=el('section');section.className='panel profile-panel';section.setAttribute('aria-labelledby','profile-heading');const heading=el('h2',saved?'Mi perfil':'Completá tu perfil');heading.id='profile-heading';section.append(heading);root.append(section);
   const status=el('p',loading?'Cargando perfil…':message);status.setAttribute('role','status');section.append(status);if(loading)return;
@@ -35,7 +36,7 @@ export function createProfileController({db,onChange}){
   const preview=el('div');preview.className='profile-preview';fields.append(preview);
   function updatePreview(){preview.replaceChildren();if(draft.photoSource==='google'&&googlePhoto(draft.photoURL)){const image=el('img');image.src=draft.photoURL;image.alt='Tu foto elegida';image.width=64;image.height=64;image.referrerPolicy='no-referrer';image.onerror=()=>{image.replaceWith(el('span','Foto no disponible'));};preview.append(image);}else{const initials=el('span',((draft.firstName?.trim()[0]||'')+(draft.lastName?.trim()[0]||'')).toUpperCase()||'LB');initials.className='profile-initials';preview.append(initials);}preview.append(el('strong',fullName(draft)||'Tu nombre y apellido'),el('p',draft.bio||'Tu presentación aparecerá aquí.'));}
   updatePreview();
-  fields.append(el('p','En esta primera entrega el perfil solo lo ves vos. La solicitud envía tu nombre completo a los administradores. La ficha compartida con socios se habilitará en una entrega posterior; tu correo y tu progreso no formarán parte de esa ficha.'));
+  fields.append(el('p','Tu perfil es privado. Si tenés acceso a la comunidad, podés activar allí una ficha con tu nombre, foto elegida y presentación. Una vez compartida, los cambios que guardes aquí también actualizan esa ficha. Tu correo y tu progreso permanecen privados.'));
   const submit=el('button',busy?'Guardando…':'Guardar perfil');submit.type='submit';submit.className='btn btn-gold';fields.append(submit);form.onsubmit=e=>{e.preventDefault();save();};
  }
  return {setIdentity,mount,requestName(){if(loading||error||busy||dirty||!saved)return '';try{return fullName(validateProfile(saved));}catch{return '';}}};
