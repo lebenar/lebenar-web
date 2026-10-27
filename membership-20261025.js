@@ -21,7 +21,7 @@ async function logout(){try{await signOut(auth);}catch{notify('No pudimos cerrar
 async function requestAccess(label){
  if(!user||busy)return;label=profiles.requestName();if(!label){notify('Completá y guardá tu perfil antes de solicitar acceso.');return;}label=label.trim();if(!label||label.length>80){notify('Escribí un nombre de entre 1 y 80 caracteres.');return;}
  const uid=user.uid;busy=true;render();
- try{await runTransaction(db,async tx=>{const ref=doc(db,'memberships',uid),snap=await tx.get(ref);if(snap.exists())return;tx.set(ref,{displayLabel:label,status:'pending',profile:'training',requestedAt:serverTimestamp(),updatedAt:serverTimestamp()});});notify('Solicitud enviada. Leonel debe autorizar tu acceso.');}
+ try{await runTransaction(db,async tx=>{const ref=doc(db,'memberships',uid),snap=await tx.get(ref);if(snap.exists())return;tx.set(ref,{displayLabel:label,status:'pending',profile:'training',requestedAt:serverTimestamp(),updatedAt:serverTimestamp()});});notify('Solicitud recibida. El equipo revisará tu acceso.');}
  catch{notify('No pudimos enviar la solicitud. Reintentá; no se creará una solicitud duplicada.');}
  finally{busy=false;render();}
 }
@@ -87,7 +87,7 @@ function render(){
  const root=document.querySelector('#access-app');if(!root)return;listStop?.();listStop=null;root.replaceChildren();const state=accessState({user,membership,admin,loading,error});
  root.append(element('h1','Tu acceso a LEBENAR®'));
  const msg=element('p',message);msg.id='access-message';msg.setAttribute('role','status');root.append(msg);
- if(!user){root.append(element('p','La formación es gratuita para personas autorizadas. Ingresá con Google y solicitá la aprobación de Leonel.'));button('Continuar con Google',login,root,loading);return;}
+ if(!user){root.append(element('p','La formación es gratuita para personas autorizadas. Ingresá con Google y solicitá la aprobación del equipo.'));button('Continuar con Google',login,root,loading);return;}
  root.append(element('p',user.displayName||'Tu cuenta'),element('small',user.email||''));button('Cerrar sesión',logout,root);
  if(state.status==='loading'){root.append(element('p','Comprobando tu autorización…'));return;}
  if(state.status==='error'){root.append(element('p','No se pudo comprobar tu autorización. Los materiales permanecen cerrados.'));button('Reintentar',()=>connect(user),root);return;}
@@ -95,8 +95,14 @@ function render(){
  if(state.status==='unrequested'){
  root.append(element('h2','Solicitá tu acceso'),element('p','El nombre que elijas será visible para Leonel al revisar tu solicitud. No incluyas teléfono, correo ni datos privados.'));
  button('Solicitar permiso al equipo de LEBENAR®',()=>requestAccess(''),root,busy||!profiles.requestName());
- }else if(state.status==='pending')root.append(element('h2','Tu solicitud está pendiente'),element('p','Leonel tiene que confirmar tu acceso antes de que puedas ver los materiales.'));
- else if(['rejected','revoked'].includes(state.status))root.append(element('h2','Tu acceso no está habilitado'),element('p','Esta cuenta no puede abrir los materiales. Si necesitás revisar tu situación, contactá a Leonel.'));
+ }else if(state.status==='pending'){
+ const pending=element('section',null,'access-journey');pending.setAttribute('aria-label','Estado de tu solicitud');pending.append(element('h2','Solicitud recibida · Pendiente de autorización'),element('p','Ya recibimos tu solicitud. El equipo de LEBENAR® revisará tu acceso. No necesitás enviarla de nuevo.'));
+ const steps=element('ol');for(const label of ['Perfil completado','Solicitud enviada','Autorización pendiente'])steps.append(element('li',label));pending.append(steps);
+ if(membership?.requestedAt?.toDate)pending.append(element('p','Solicitud enviada el '+membership.requestedAt.toDate().toLocaleDateString('es-AR',{timeZone:'America/Argentina/Buenos_Aires'})));
+ pending.append(element('p','Mientras esperás, podés completar tu perfil, conocer mejor el proyecto o conversar con el equipo. Tu estado se actualizará aquí cuando se resuelva la solicitud.'));
+ for(const [href,label]of [['#proyecto','Conocer el proyecto'],['https://wa.me/5491138778903?text='+encodeURIComponent('Hola, solicité acceso a LEBENAR® y quiero consultar por mi incorporación.'),'Contactar al equipo por WhatsApp']]){const a=element('a',label,'btn btn-light');a.href=href;if(href.startsWith('https:')){a.target='_blank';a.rel='noopener noreferrer';}pending.append(a);}root.append(pending);
+ }
+ else if(['rejected','revoked'].includes(state.status))root.append(element('h2','Tu acceso no está habilitado'),element('p','Esta cuenta no puede abrir los materiales. Si necesitás revisar tu situación, contactá al equipo de LEBENAR®.'));
  if(state.training){root.append(element('p',state.admin?'Administrador: acceso a toda la formación, biblioteca y comunidad.':state.community?'Acceso autorizado: entrenamiento y comunidad de socios.':'Acceso autorizado: entrenamiento y biblioteca.'));const links=element('div',null,'button-row');for(const [href,label]of [['#primeros-pasos','Ir al entrenamiento 30D'],['#recursos','Ver toda la formación'],['#progreso','Ver mi progreso'],...(state.community?[['#comunidad','Ir a la comunidad']]:[])]){const a=element('a',label,'btn btn-gold');a.href=href;links.append(a);}root.append(links);}
  if(state.admin){const dashboard=element('section');dashboard.append(element('h2','Administrar accesos'));const tabs=element('div',null,'button-row');for(const [value,title]of [['pending','Pendientes'],['approved','Autorizados'],['rejected','Rechazados'],['revoked','Revocados'],...(isPrimary()?[['administrators','Administradores']]:[])]){const b=button(title,()=>{filter=value;render();},tabs);b.setAttribute('aria-pressed',String(filter===value));}dashboard.append(element('p',isPrimary()?'Administración principal: autorizá principiantes y socios, y asigná o retirá administradores desde las cuentas autorizadas.':'Podés gestionar solicitudes y acceder a todo el contenido. La cuenta principal administra los permisos de otros administradores.'));dashboard.append(tabs);const list=element('div');list.id='request-list';list.setAttribute('aria-live','polite');dashboard.append(list);root.append(dashboard);watchList();}
 }
